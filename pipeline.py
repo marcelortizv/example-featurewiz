@@ -1,13 +1,11 @@
 import pandas as pd
 
 import numpy as np
+import xgboost as xgb
 from featurewiz import featurewiz
-from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split, RandomizedSearchCV
-from sklearn.metrics import balanced_accuracy_score
-from featurewiz import simple_XGBoost_model
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_curve, classification_report
 
 
 def clean_dataset(df):
@@ -46,7 +44,7 @@ def preprocess(df: pd.DataFrame, target_string: str, scaler: bool):
 
 if __name__ == '__main__':
 
-    data_path = '../data'
+    data_path = 'data'
     filename_data = 'clean-dataset'
 
     print("Start reading dataset")
@@ -57,23 +55,65 @@ if __name__ == '__main__':
     X, y = preprocess(data, 'dpnm', scaler=False)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=999)
 
-    train_data = pd.concat([X_train, y_train], axis=1)
-    test_data = pd.concat([X_test, y_test], axis=1)
+    train_data = pd.concat([X_train, pd.Series(y_train)], axis=1)
+    test_data = pd.concat([X_test, pd.Series(y_test)], axis=1)
+
+    # rename targe column
+    train_data.rename(columns={0: "dpnm"}, inplace=True)
+    test_data.rename(columns={0: "dpnm"}, inplace=True)
+    train_data.reset_index(inplace=True, drop=True)
+    test_data.reset_index(inplace=True, drop=True)
+    train_data.dropna(subset=['dpnm'], inplace=True)
+    test_data.dropna(subset=['dpnm'], inplace=True)
+
     print('Performing feature selection')
-    trainm, testm = featurewiz(train=train_data,
-                          target='dpnm',
-                          test_data=test_data,
-                          corr_limit=0.70,
-                          verbose=2
-                          )
+    trainm, testm = featurewiz(train_data,
+                               target='dpnm',
+                               test_data=test_data,
+                               corr_limit=0.70,
+                               verbose=2
+                               )
 
-    feats = testm.columns.tolist()
-    print(f'Number of features selected: {len(feats)}')
+    selected_features = testm.columns.tolist()
+    print(f'Number of features selected: {len(selected_features)}')
 
-    y_preds = simple_XGBoost_model(trainm[feats], trainm['dpnm'], testm[feats])
-    y_pred = y_preds[0]
+    # training model
+    print('Starting training:')
+    num_round = 60
+    params = {'objective': 'binary:logistic',
+        'eval_metric': 'logloss',
+        'verbosity': 0, 'random_state': 71}
+    while True:
+        xg_train = xgb.DMatrix(X_train[selected_features], label=y_train)
+        watchlist = [(xg_train, 'train')]
 
-    print(balanced_accuracy_score(y_test, y_pred))
+        bst = xgb.train(params, xg_train, num_round, watchlist)
+        scores = bst.get_score(importance_type='gain')
+        scores_list = [(k, v) for k, v in scores.items()]
+        scores_list.sort(key=lambda x: x[1], reverse=True)
+        new_features = list(scores.keys())
+
+        if len(selected_features) == len(new_features):
+            print('___________________________________________________________________________')
+            print('End training')
+            break
+        else:
+            selected_features = new_features
+    # TESTING PART
+    X_test = X_test[selected_features]
+    X_train = X_train[selected_features]
+    xg_test = xgb.DMatrix(X_test, label=y_test)
+
+    fpr, tpr, thresholds = roc_curve(y_train,
+                                     bst.predict(xg_train))
+
+    cutoff = thresholds[np.argmin(np.abs(fpr + tpr - 1))]
+    print('The probability cutoff for prediction in model is: ', cutoff)
+
+    y_pred = bst.predict(xg_test)
+    ypredicted = np.where(y_pred > cutoff, 1, 0)
+    print(classification_report(y_test, ypredicted, target_names=['No Fraud', 'Fraud']))
+
     print('Done')
 
 
