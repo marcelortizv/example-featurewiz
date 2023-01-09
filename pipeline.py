@@ -82,7 +82,8 @@ if __name__ == '__main__':
     num_round = 60
     params = {'objective': 'binary:logistic',
         'eval_metric': 'logloss',
-        'verbosity': 0, 'random_state': 71}
+        'learning_rate': 0.2,
+        'max_depth': 11}
     while True:
         xg_train = xgb.DMatrix(X_train[selected_features], label=y_train)
         watchlist = [(xg_train, 'train')]
@@ -115,6 +116,4 @@ if __name__ == '__main__':
     print(classification_report(y_test, ypredicted, target_names=['No Fraud', 'Fraud']))
 
     print('Done')
-
-
 
