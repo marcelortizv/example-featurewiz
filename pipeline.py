@@ -113,7 +113,7 @@ if __name__ == '__main__':
 
     y_pred = bst.predict(xg_test)
     ypredicted = np.where(y_pred > cutoff, 1, 0)
-    print(classification_report(y_test, ypredicted, target_names=['No Fraud', 'Fraud']))
+    print(classification_report(y_test, ypredicted, target_names=['No Default', 'Default']))
 
     print('Done')
 
