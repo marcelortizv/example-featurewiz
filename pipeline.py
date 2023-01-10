@@ -17,7 +17,7 @@ def clean_dataset(df):
 
 def preprocess(df: pd.DataFrame, target_string: str, scaler: bool):
     """
-    Process the raw dataset into to sets, predictors and target
+    Process the raw dataset into two sets, predictors and target
     :param
     df: raw dataframe
     target_string: name of target columns
